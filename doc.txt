@@ -1,0 +1,256 @@
+EduAI
+School Tier
+Pilot Module Scope + Platform Architecture
+Class 9–12  ·  Foundation CS  ·  NGO Government Scheme Pilot
+Prepared by Rizwan  ·  EduAI  ·  Coimbatore, Tamil Nadu  ·  2025
+Executive Summary
+The opportunity, the product, and the path forward
+EduAI's School Tier is a focused extension of the core EduAI platform targeting Class 9–12 students under an NGO-led government education scheme. The goal: build genuine CS intuition early — not memorization for board exams, but the kind of foundational thinking that produces FAANG-level engineers over the next decade.
+This document covers two things in one: (1) the scope and content flow of the NGO pilot module, and (2) how the school tier slots into EduAI's existing platform architecture. Both are designed to be built together, not sequentially.
+Pilot Goal
+Demonstrate full learning loop in one 45-minute module. Concept → Visualization → Sandbox → AI Tutor → Quiz.
+Architecture Goal
+Reuse EduAI's existing infra stack (Supabase, Render, Vercel). Add a School tier, School content spine, and coordinator dashboard.
+01  |  The Opportunity
+Why school-level CS infrastructure matters now
+The Problem EduAI School Solves
+Indian school CS education currently falls into two failure modes: rote theory for board exams (no building, no intuition) or expensive coaching that only metro, upper-income students can access. Neither produces engineers. Both produce students who arrive at college never having written a program that did something they actually wanted.
+The NEP 2020 framework explicitly calls for computational thinking from Class 6 onward — but almost no infrastructure exists to deliver it at government school scale. That is the gap.
+Why Now
+The NGO-govt scheme pathway is the lowest-friction entry into this market. No tender process, no procurement cycle. A successful pilot converts directly into a funded rollout. Government schemes often have real per-student budget once a proof-of-concept is validated.
+Why EduAI is Well-Positioned
+Already building visualized CS content for college students — the tooling translates directly
+Existing AI Tutor infrastructure (Haiku for chat, Sonnet for roadmaps) adapts to younger learners with prompt-level changes
+Sandbox work (Judge0/Pyodide) already planned for EduAI college tier
+Coimbatore base gives proximity to Tamil Nadu govt education network
+Founder has direct domain familiarity as a recent CS graduate from the target student's future pathway
+02  |  Pilot Module Scope
+Introduction to Programming with Python — Class 9–10
+Pilot Philosophy
+One module. End-to-end. The NGO needs to see the full loop working — not a slide deck. Build the smallest complete experience that demonstrates concept → visual → hands-on → AI support → assessment. 30–45 minutes, completable in a single session.
+Module: Introduction to Programming with Python
+Target audience: Class 9–10, zero prior programming experience. Language: Python (no installation required, browser-based). Completion time: 30–45 minutes.
+Learning Outcomes
+Understand what a program is and why computers need instructions
+Read and write simple Python statements (print, variables, input)
+Understand what happens when code runs — step by step execution model
+Modify a working program and observe the result
+Ask the AI Tutor a question and get a useful answer
+Module Flow — 5 Stages
+1
+Concept Hook  —  2–3 min
+A 60-second animated explainer: what is a computer program? Use an everyday analogy — a recipe, or directions to a shop. No text walls. Ends with one question: ‘What do you think happens when you run this code?’
+Animated SVG / Lottie  ·  Zero reading load
+2
+Visualized Execution  —  5–7 min
+Show a 5-line Python program. Walk through it line by line — highlight the active line, show variable values changing in real time, show output appearing. Student controls: Step Forward, Step Back, Speed slider. No explanation text — the visual IS the explanation.
+Interactive SVG step-through  ·  Student-paced
+3
+Guided Sandbox  —  10–15 min
+Pre-loaded Python editor (Pyodide, browser-based). Three scaffolded micro-challenges. Challenge 1: Change a variable value, see output change. Challenge 2: Add your name to the print statement. Challenge 3: Write a program that asks your name and greets you. Each has a ‘Hint’ button before a ‘Solution’ button.
+Pyodide sandbox  ·  Scaffolded  ·  No blank canvas
+4
+AI Tutor Checkpoint  —  5–10 min
+After sandbox, surface 3 common questions students typically have at this point (‘Why do we need quotes?’, ‘What is a variable for?’, ‘Can Python do math?’). Student can tap one or type their own. AI responds in simple, age-appropriate language with a follow-up example. One free question included in pilot.
+Claude Haiku  ·  Simplified system prompt  ·  Socratic tone
+5
+Quiz + Completion  —  5 min
+5 MCQs. Concept-based, not syntax memorization. E.g., ‘What happens if you change this variable?’ with a code snippet. Score displayed. Completion badge shown. Progress written to NGO coordinator dashboard.
+5 MCQs  ·  Concept-first  ·  Completion tracked
+Content Tone and Language Principles
+Core Rule
+Never deficit-frame the student or their background. Frame every concept as access to something powerful, not remediation of a gap. Use Tamil Nadu everyday context where possible (auto, tiffin, recharge) as analogies, not just metro references.
+All UI text in English, but analogy language can borrow from Tamil context
+AI Tutor system prompt explicitly set to Class 9–10 reading level — no jargon unless introduced
+Error messages in the sandbox must be human-readable, not raw Python tracebacks
+Quiz feedback must explain why the answer is correct, not just mark right/wrong
+03  |  Full Curriculum Spine
+Beyond the pilot — Class 9–12 module sequence
+The pilot covers Module 1. The full School Tier curriculum spine below maps out what a complete Class 9–12 foundation CS track looks like. This is not needed for the pilot but is needed for the NGO conversation — they need to see you have a plan, not just a demo.
+Class 9–10 Track  —  Foundation CS
+#
+Module
+Key Concepts
+Visual Tool
+M1
+Intro to Programming
+Programs, variables, print, input, execution model
+Step-through viz
+M2
+Conditions & Decisions
+if/else, boolean logic, comparison operators
+Decision tree viz
+M3
+Loops
+for, while, iteration, counters, nested loops
+Loop animation viz
+M4
+Functions
+Define, call, parameters, return values, scope
+Call stack viz
+M5
+Lists & Data
+Lists, indexing, iteration, append/remove, basic sorting
+Array viz
+M6
+How Computers Work
+Binary, CPU, memory, input/output model
+Hardware diagram viz
+Class 11–12 Track  —  Applied CS
+#
+Module
+Key Concepts
+Visual Tool
+M7
+Data Structures
+Arrays, linked lists, stacks, queues — visual + code
+DSA visualizer (EduAI core)
+M8
+Algorithms
+Sorting, searching, time complexity basics
+Algorithm animation
+M9
+OOP Fundamentals
+Classes, objects, methods, inheritance
+Class diagram viz
+M10
+Web & Internet
+How HTTP works, what happens when you open a URL
+Network diagram viz
+M11
+Databases Basics
+Tables, queries, CRUD, when to use a DB
+Query viz
+M12
+Build Your First App
+Guided project: a simple web app or CLI tool end-to-end
+Project scaffold
+04  |  Platform Architecture
+How School Tier fits into EduAI
+One Platform, Two Tiers
+The core insight: EduAI's infrastructure (Supabase, Render, Vercel, AI routing) is content-agnostic. The School Tier is not a new platform — it is a new content spine + a new user role + a coordinator dashboard, running on the same stack.
+Key Principle
+Don't build twice. The AI Tutor, sandbox runner, visualizer framework, auth system, XP/streak engine, and payment infra are all shared. School Tier adds: School content DB, Student (School) role, Coordinator role, and simplified AI Tutor prompts.
+Shared Infrastructure (No Changes Needed)
+Component
+What it does
+School Tier use
+Supabase Pro
+Auth, DB, real-time, storage
+Same — new tables for school content + coordinator role
+Render (2 instances)
+AI API proxy, sandbox backend (Judge0)
+Same — school AI calls route through existing proxy
+Vercel Hobby
+Frontend hosting, static assets
+Same — school routes added to existing Next.js app
+Claude Haiku
+AI Tutor chat
+Same — new system prompt with school-level language
+Claude Sonnet
+Roadmap generation
+New use: personalized Class 11–12 study plan generation
+Pyodide / Judge0
+Browser Python sandbox
+Same — already planned; school gets it first
+Brevo
+Email / transactional
+Same — add coordinator welcome + progress emails
+New Components for School Tier
+1. School Content Database (Supabase)
+New tables alongside existing college content:
+school_modules — title, grade level (9-10 / 11-12), order, status
+school_lessons — concept text, visualizer config, sandbox starter code, quiz questions
+school_progress — student_id, module_id, stage completed, score, timestamp
+school_coordinators — NGO/school staff who can view batch-level dashboards
+2. User Role: Student (School)
+Extends the existing user roles (Student College, Admin). Key differences:
+Onboarded via batch code (NGO issues a code, student enters it — no payment flow for pilot)
+Sees School Tier content only, not College Tier content
+AI Tutor quota: unlimited for pilot (NGO-funded), monthly limit post-pilot
+Progress visible to their coordinator
+3. Coordinator Dashboard
+The NGO’s single most important feature. They need to demonstrate impact metrics to the govt scheme. Keep it minimal but complete:
+Total students enrolled, active this week, modules completed
+Per-student progress view: which module, which stage, quiz scores
+Export to CSV for govt reporting
+No coding required to use — web dashboard, login with email
+4. School AI Tutor System Prompt
+The AI Tutor uses Claude Haiku with a different system prompt for school students. Key prompt principles:
+Respond at a Class 9-10 reading level (no technical jargon unless the concept requires it)
+Use the Socratic method: ask ‘what do you think happens if...’ before giving answers
+Always include a concrete, relatable example (not abstract)
+Never say ‘that’s wrong’ — say ‘almost, let’s think about it differently’
+If the student is stuck, break the problem into smaller steps
+05  |  Pilot Build Plan
+What to build, in what order, by when
+The pilot can be built in 3 focused sprints. The goal is a shippable demo — not production-ready at scale, but real enough that the NGO can put it in front of 20–30 students and collect genuine feedback.
+Sprint
+Focus
+Deliverables
+Duration
+Sprint 1
+Module shell + visualizer
+Concept hook animation, step-through code visualizer for M1, basic layout/routing, school student auth (batch code)
+1 week
+Sprint 2
+Sandbox + AI Tutor
+Pyodide sandbox with 3 scaffolded challenges, hint/solution flow, AI Tutor integration with school system prompt, 3 pre-set questions
+1 week
+Sprint 3
+Quiz + Dashboard + Polish
+5-MCQ quiz with feedback, completion badge, coordinator dashboard (basic), CSV export, end-to-end flow test
+1 week
+3-Week Target
+Ship a working pilot demo in 3 weeks. Not perfect — working. The NGO is not evaluating production quality; they are evaluating whether the learning experience is real and whether the impact metrics are trackable.
+AI Cost Model for Pilot
+The pilot uses Claude Haiku for all school AI Tutor interactions. At pilot scale (20–50 students, each generating ~30 AI interactions per module), cost is negligible:
+Scenario
+AI Interactions
+Estimated Cost (Haiku)
+Pilot: 50 students
+50 × 30 = 1,500 calls
+~₹50–80 total
+Small rollout: 500 students
+500 × 50/mo = 25,000 calls
+~₹600–900/month
+Full scheme: 5,000 students
+5,000 × 50/mo = 250,000 calls
+~₹6,000–9,000/month
+06  |  Commercial Model
+How this becomes a sustainable business
+The school tier has a fundamentally different commercial model from EduAI's B2C college subscription. The NGO pilot is free — it is a proof of concept. The commercial model activates post-pilot in three phases:
+Phase 1: NGO Pilot
+Free. 20–50 students. NGO covers any hard costs. Goal: validated impact data.
+Phase 2: Scheme Rollout
+Per-student fee paid by govt scheme budget. ₹75–100/student/month. 500–5,000 students.
+Phase 3: Private School B2B
+Sell to private schools and coaching institutes using pilot + scheme data as proof. ₹150–250/student/month.
+Relationship to EduAI College
+School students who complete Class 12 are natural EduAI college leads. The platform builds a pipeline, not just a product.
+07  |  Immediate Next Steps
+What to do this week
+#
+Action
+Owner / Note
+1
+Send this doc to NGO contact as a follow-up to the initial conversation
+Rizwan — share as PDF, not editable
+2
+Confirm pilot scope with NGO: how many students, which school, which dates
+NGO contact
+3
+Confirm govt scheme name and any reporting requirements they have for the pilot
+NGO contact
+4
+Decide: build school tier under EduAI brand or a sub-brand (e.g. EduAI Junior / EduAI School)
+Rizwan
+5
+Start Sprint 1: concept hook animation + code step-through visualizer for M1
+Rizwan — use this doc as the spec
+6
+Set up coordinator dashboard schema in Supabase (can be simple view initially)
+Rizwan
+The best time to give a student access to real CS infrastructure was Class 6.
+The second best time is now.
+EduAI School  ·  eduaiajk.in  ·  Coimbatore, Tamil Nadu
