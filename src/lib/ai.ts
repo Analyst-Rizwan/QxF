@@ -1,79 +1,89 @@
-// Use VITE_API_URL in production, fallback to 8000 for local dev (no proxy in school tier by default unless configured)
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
-
 /**
- * Stream a chat response from the School AI (SSE), tailored for Class 9-10.
+ * AI Tutor — SSE Streaming Client
+ * Streams from FastAPI backend /chat/stream endpoint.
  */
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+
+interface StreamOptions {
+  conversation_id?: number | null
+  student_id?: string
+  module_title?: string
+  module_slug?: string
+}
+
 export async function streamMessageFromSchoolAI(
   message: string,
-  onToken: (text: string) => void,
+  onDelta: (text: string) => void,
   onDone: (fullText: string, conversationId: number | null) => void,
-  opts?: { conversation_id?: number | null }
+  options: StreamOptions = {}
 ): Promise<void> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  
-  // Note: App operates without tokens for the pilot. 
-  // Authentication is handled via the batch code system conceptually, 
-  // and the dashboard/chat routes are open for the pilot demo.
-
-  const body: Record<string, unknown> = { message };
-  if (opts?.conversation_id != null) body.conversation_id = opts.conversation_id;
-
   try {
-    const res = await fetch(`${API_BASE_URL}/school/chat/stream`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
+    const response = await fetch(`${API_BASE}/school/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        student_id: options.student_id || localStorage.getItem('eduai_student_id') || 'anon',
+        conversation_id: options.conversation_id ?? null,
+        module_title: options.module_title ?? null,
+        module_slug: options.module_slug ?? null,
+      }),
+    })
 
-    if (!res.ok || !res.body) {
-      console.error("Streaming error:", res.status);
-      onDone("⚠️ AI server returned an error.", null);
-      return;
+    if (!response.ok) {
+      onDelta('Sorry, I couldn\'t connect to the AI service. Try again in a moment.')
+      onDone('Sorry, I couldn\'t connect to the AI service. Try again in a moment.', null)
+      return
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let conversationId: number | null = opts?.conversation_id ?? null;
+    const reader = response.body?.getReader()
+    if (!reader) {
+      onDelta('Connection error.')
+      onDone('Connection error.', null)
+      return
+    }
+
+    const decoder = new TextDecoder()
+    let fullText = ''
+    let conversationId: number | null = null
+    let buffer = ''
 
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const { done, value } = await reader.read()
+      if (done) break
 
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; 
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // Keep incomplete line in buffer
 
       for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const jsonStr = line.slice(6).trim();
-        if (!jsonStr) continue;
+        if (!line.startsWith('data: ')) continue
+        const jsonStr = line.slice(6).trim()
+        if (!jsonStr) continue
 
         try {
-          const evt = JSON.parse(jsonStr);
+          const event = JSON.parse(jsonStr)
 
-          if (evt.type === "conv") {
-            conversationId = evt.conversation_id;
-          } else if (evt.type === "delta") {
-            onToken(evt.text || "");
-          } else if (evt.type === "done") {
-            onDone(evt.full_text || "", conversationId);
-            return;
-          } else if (evt.type === "error") {
-            onDone("⚠️ " + (evt.message || "AI streaming error."), conversationId);
-            return;
+          if (event.type === 'conv' && event.conversation_id != null) {
+            conversationId = event.conversation_id
+          } else if (event.type === 'delta' && event.text) {
+            fullText += event.text
+            onDelta(event.text)
+          } else if (event.type === 'done') {
+            fullText = event.full_text || fullText
+          } else if (event.type === 'error') {
+            onDelta(`\n\n⚠️ ${event.message}`)
           }
         } catch {
-          // Skip malformed JSON
+          // skip malformed events
         }
       }
     }
 
-    onDone("", conversationId);
-  } catch (err) {
-    console.error("AI Stream Error:", err);
-    onDone("⚠️ Could not connect to AI server.", null);
+    onDone(fullText, conversationId)
+  } catch {
+    onDelta('⚠️ Could not connect to the AI Tutor. Is the backend running on port 8000?')
+    onDone('Could not connect to the AI Tutor.', null)
   }
 }

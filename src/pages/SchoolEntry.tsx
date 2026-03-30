@@ -35,7 +35,7 @@ export default function SchoolEntry() {
         return
       }
       setEnrollment(trimmed, batchName)
-      navigate('/module/m1')
+      navigate('/setup')
     }, 600)
   }
 

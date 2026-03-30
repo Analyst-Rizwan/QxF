@@ -11,7 +11,7 @@ export interface QuizQuestion {
 
 interface Props {
   questions: QuizQuestion[]
-  onComplete: () => void
+  onComplete: (scorePercent: number) => void
 }
 
 export default function QuizStage({ questions, onComplete }: Props) {
@@ -96,7 +96,7 @@ export default function QuizStage({ questions, onComplete }: Props) {
         </div>
 
         <button
-          onClick={onComplete}
+          onClick={() => onComplete(pct)}
           className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-black font-semibold rounded-xl py-3.5 text-sm transition-all duration-200 shadow-lg shadow-amber-500/20 hover:-translate-y-0.5"
         >
           Complete Module ✓

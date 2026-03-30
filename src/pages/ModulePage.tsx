@@ -1,4 +1,4 @@
-// T2 + T6: Module page — stage state machine + progress wiring
+// T2 + T6: Module page — stage state machine + progress wiring + XP
 import { useParams, useNavigate } from 'react-router-dom'
 import SchoolLayout from '@/components/SchoolLayout'
 import HookStage from '@/components/stages/HookStage'
@@ -27,27 +27,33 @@ export default function ModulePage() {
   const ALL_STAGES = STAGES_INFO
   const currentStageIndex = progress.currentStage
   const currentStageKey = ALL_STAGES[currentStageIndex]?.key ?? 'hook'
-  const m = module // narrowed: not null past the guard above
+  const m = module
 
-  function handleStageComplete() {
+  function handleStageComplete(extras?: { quizScore?: number; challengesCompleted?: number }) {
     const nextIndex = currentStageIndex + 1
-    completeStage(currentStageKey, nextIndex)
+    completeStage(currentStageKey, nextIndex, extras)
 
     if (nextIndex >= ALL_STAGES.length) {
-      navigate('/complete')
+      navigate(`/complete/${slug}`)
     }
   }
 
   function renderStage() {
     switch (currentStageKey) {
       case 'hook':
-        return <HookStage onComplete={handleStageComplete} />
+        return (
+          <HookStage
+            hookConfig={m.hookConfig}
+            moduleTitle={m.title}
+            onComplete={() => handleStageComplete()}
+          />
+        )
       case 'visualizer':
         return (
           <VisualizerStage
             codeLines={m.codeLines}
             steps={m.visualizerSteps}
-            onComplete={handleStageComplete}
+            onComplete={() => handleStageComplete()}
           />
         )
       case 'sandbox':
@@ -56,16 +62,23 @@ export default function ModulePage() {
             starterCode={m.sandboxConfig.starterCode}
             challenge={m.sandboxConfig.challenge}
             successHint={m.sandboxConfig.successHint}
-            onComplete={handleStageComplete}
+            challenges={m.sandboxConfig.challenges}
+            onComplete={(challengesCompleted) => handleStageComplete({ challengesCompleted })}
           />
         )
       case 'tutor':
-        return <TutorStage onComplete={handleStageComplete} />
+        return (
+          <TutorStage
+            moduleTitle={m.title}
+            presetQuestions={m.tutorPresetQuestions}
+            onComplete={() => handleStageComplete()}
+          />
+        )
       case 'quiz':
         return (
           <QuizStage
             questions={m.quizQuestions}
-            onComplete={handleStageComplete}
+            onComplete={(score) => handleStageComplete({ quizScore: score })}
           />
         )
       default:
@@ -78,6 +91,7 @@ export default function ModulePage() {
       currentStageIndex={currentStageIndex}
       totalStages={ALL_STAGES.length}
       moduleTitle={m.title}
+      moduleSlug={slug ?? ''}
     >
       {renderStage()}
     </SchoolLayout>

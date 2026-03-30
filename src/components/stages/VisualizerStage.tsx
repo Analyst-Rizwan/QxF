@@ -1,6 +1,7 @@
 // T4: Code Step-Through Visualizer — Stage 2
-// Interactive: step forward/back, variables panel animates in, output appears on step 5
-import { useState, useEffect, useRef } from 'react'
+// Enhanced: auto-play, speed control, keyboard navigation
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Play, Pause, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { VisualizerStep } from '@/data/modules'
 
 interface Props {
@@ -9,57 +10,92 @@ interface Props {
   onComplete: () => void
 }
 
+const SPEEDS = [
+  { label: '0.5×', ms: 2400 },
+  { label: '1×', ms: 1200 },
+  { label: '2×', ms: 600 },
+]
+
 export default function VisualizerStage({ codeLines, steps, onComplete }: Props) {
   const [currentStep, setCurrentStep] = useState(0)
   const [prevVarKeys, setPrevVarKeys] = useState<string[]>([])
   const [flashingKeys, setFlashingKeys] = useState<string[]>([])
   const [showComplete, setShowComplete] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [speedIndex, setSpeedIndex] = useState(1) // default 1×
   const outputRef = useRef<HTMLDivElement>(null)
+  const playTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const step = steps[currentStep]
   const isLast = currentStep === steps.length - 1
 
-  function goNext() {
-    if (currentStep < steps.length - 1) {
-      advanceTo(currentStep + 1)
-    } else {
-      setShowComplete(true)
-    }
-  }
-
-  function goPrev() {
-    if (currentStep > 0) {
-      advanceTo(currentStep - 1)
-    }
-  }
-
-  function advanceTo(nextIdx: number) {
+  const advanceTo = useCallback((nextIdx: number) => {
     const nextStep = steps[nextIdx]
     const nextKeys = Object.keys(nextStep.vars)
-    const prevKeys = Object.keys(steps[currentStep].vars)
+    const prevKeys = Object.keys(steps[currentStep]?.vars ?? {})
 
-    // Determine which keys changed value (not just new ones)
     const changed = nextKeys.filter(
-      (k) => prevKeys.includes(k) && nextStep.vars[k] !== steps[currentStep].vars[k]
+      (k) => prevKeys.includes(k) && nextStep.vars[k] !== steps[currentStep]?.vars[k]
     )
 
     setPrevVarKeys(prevKeys)
     setCurrentStep(nextIdx)
     setShowComplete(false)
 
-    // Flash changed variable values
     if (changed.length > 0) {
       setFlashingKeys(changed)
       setTimeout(() => setFlashingKeys([]), 500)
     }
-  }
+  }, [currentStep, steps])
 
-  // Scroll output into view when it appears
+  // Auto-play logic
   useEffect(() => {
-    if (step.output && outputRef.current) {
+    if (!isPlaying) {
+      if (playTimerRef.current) clearTimeout(playTimerRef.current)
+      return
+    }
+    const speed = SPEEDS[speedIndex].ms
+    playTimerRef.current = setTimeout(() => {
+      if (currentStep < steps.length - 1) {
+        advanceTo(currentStep + 1)
+      } else {
+        setIsPlaying(false)
+        setShowComplete(true)
+      }
+    }, speed)
+    return () => {
+      if (playTimerRef.current) clearTimeout(playTimerRef.current)
+    }
+  }, [isPlaying, currentStep, speedIndex, steps.length, advanceTo])
+
+  // Keyboard navigation
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'ArrowRight') {
+        if (currentStep < steps.length - 1) advanceTo(currentStep + 1)
+        else setShowComplete(true)
+      }
+      if (e.key === 'ArrowLeft' && currentStep > 0) advanceTo(currentStep - 1)
+      if (e.key === ' ') { e.preventDefault(); setIsPlaying(p => !p) }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [currentStep, steps.length, advanceTo])
+
+  useEffect(() => {
+    if (step?.output && outputRef.current) {
       outputRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
-  }, [step.output])
+  }, [step?.output])
+
+  function goNext() {
+    if (currentStep < steps.length - 1) advanceTo(currentStep + 1)
+    else setShowComplete(true)
+  }
+
+  function goPrev() {
+    if (currentStep > 0) advanceTo(currentStep - 1)
+  }
 
   const varEntries = Object.entries(step.vars)
 
@@ -74,18 +110,47 @@ export default function VisualizerStage({ codeLines, steps, onComplete }: Props)
         <p className="text-slate-400 text-sm">Follow the code as it runs, one line at a time.</p>
       </div>
 
-      {/* Step counter */}
-      <div className="flex items-center justify-between mb-3 text-xs text-slate-500">
-        <span>Step {currentStep + 1} of {steps.length}</span>
-        <div className="flex gap-1">
-          {steps.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === currentStep ? 'w-4 bg-teal-400' : i < currentStep ? 'w-1.5 bg-teal-700' : 'w-1.5 bg-slate-700'
-              }`}
-            />
-          ))}
+      {/* Step counter + controls row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span>Step {currentStep + 1} of {steps.length}</span>
+          <div className="flex gap-1">
+            {steps.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => advanceTo(i)}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === currentStep ? 'w-4 bg-teal-400' : i < currentStep ? 'w-1.5 bg-teal-700' : 'w-1.5 bg-slate-700'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+        {/* Auto-play controls */}
+        <div className="flex items-center gap-2">
+          {/* Speed selector */}
+          <div className="flex rounded-lg overflow-hidden border border-slate-700">
+            {SPEEDS.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => setSpeedIndex(i)}
+                className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                  i === speedIndex ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setIsPlaying(p => !p)}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+              isPlaying ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+            title={isPlaying ? 'Pause (Space)' : 'Auto-play (Space)'}
+          >
+            {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+          </button>
         </div>
       </div>
 
@@ -101,11 +166,9 @@ export default function VisualizerStage({ codeLines, steps, onComplete }: Props)
             </div>
             <span className="text-xs text-slate-500 font-mono">program.py</span>
           </div>
-
           <div className="p-3">
             {codeLines.map((line, i) => {
               const isActive = i === step.line
-              // Split off the comment
               const [code, ...commentParts] = line.split('#')
               const comment = commentParts.length > 0 ? '#' + commentParts.join('#') : ''
 
@@ -133,10 +196,10 @@ export default function VisualizerStage({ codeLines, steps, onComplete }: Props)
 
         {/* Variables panel */}
         <div className="sm:w-44 bg-[#1a1a2e] border border-slate-700/50 rounded-2xl overflow-hidden">
-          <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700/50">
+          <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700/50 flex items-center justify-between">
             <span className="text-xs text-slate-500 font-medium">Variables</span>
+            <span className="text-[10px] text-slate-600">{varEntries.length} stored</span>
           </div>
-
           <div className="p-3 space-y-2">
             {varEntries.length === 0 && (
               <p className="text-xs text-slate-600 italic">None yet</p>
@@ -144,7 +207,6 @@ export default function VisualizerStage({ codeLines, steps, onComplete }: Props)
             {varEntries.map(([key, value]) => {
               const isNew = !prevVarKeys.includes(key)
               const isFlashing = flashingKeys.includes(key)
-
               return (
                 <div
                   key={key}
@@ -164,40 +226,45 @@ export default function VisualizerStage({ codeLines, steps, onComplete }: Props)
         </div>
       </div>
 
-      {/* Output panel — only on step 5 */}
+      {/* Output panel */}
       {step.output && (
         <div
           ref={outputRef}
           className="bg-[#0f0f1a] border border-teal-500/30 rounded-xl p-3 mb-3 animate-slide-up"
         >
           <p className="text-xs text-teal-500 uppercase tracking-wider mb-1 font-medium">Output</p>
-          <p className="font-mono text-base text-white">
-            {step.output}
-          </p>
+          <p className="font-mono text-base text-white whitespace-pre">{step.output}</p>
         </div>
       )}
 
       {/* Explanation */}
-      <div className="bg-[#1a1a2e] border border-slate-700/30 rounded-xl px-4 py-3 mb-5">
+      <div className="bg-[#1a1a2e] border border-slate-700/30 rounded-xl px-4 py-3 mb-4 min-h-[64px]">
         <p className="text-sm text-slate-300 leading-relaxed">{step.explanation}</p>
       </div>
+
+      {/* Keyboard hint */}
+      <p className="text-xs text-slate-600 text-center mb-3">
+        ← → arrow keys to step · Space to play/pause
+      </p>
 
       {/* Navigation */}
       <div className="flex gap-3">
         <button
           onClick={goPrev}
           disabled={currentStep === 0}
-          className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white font-medium rounded-xl py-3 text-sm transition-all duration-200"
+          className="flex items-center gap-1 flex-1 justify-center bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white font-medium rounded-xl py-3 text-sm transition-all duration-200"
         >
-          ← Prev
+          <ChevronLeft className="w-4 h-4" />
+          Prev
         </button>
 
         {!showComplete ? (
           <button
             onClick={goNext}
-            className="flex-1 bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-400 hover:to-teal-300 text-black font-semibold rounded-xl py-3 text-sm transition-all duration-200 shadow-lg shadow-teal-500/20 hover:-translate-y-0.5"
+            className="flex items-center gap-1 flex-1 justify-center bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-400 hover:to-teal-300 text-black font-semibold rounded-xl py-3 text-sm transition-all duration-200 shadow-lg shadow-teal-500/20 hover:-translate-y-0.5"
           >
-            {isLast ? 'See result →' : 'Next →'}
+            {isLast ? 'See result' : 'Next'}
+            <ChevronRight className="w-4 h-4" />
           </button>
         ) : (
           <button

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Download, Users, CheckCircle, Activity, ChevronRight, Loader2 } from 'lucide-react'
+import { Download, Users, CheckCircle, Activity, ChevronRight, Loader2, Star, BarChart2 } from 'lucide-react'
+import { getAllProgress, getStudentProfile } from '@/hooks/useProgress'
+import { MODULES, MODULE_ORDER } from '@/data/modules'
+import { loadXPState } from '@/lib/XPEngine'
 
-// Use VITE_API_URL or fallback to localhost:8000 for local backend testing
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
-interface StudentProgress {
+interface ApiStudentProgress {
   id: string
   name: string
   stages_completed: number
@@ -12,31 +14,33 @@ interface StudentProgress {
   completed_at: string | null
 }
 
-interface DashboardData {
+interface ApiDashboardData {
   batch_code: string
   enrolled: number
   active: number
   completed: number
   average_score: number
-  students: StudentProgress[]
+  students: ApiStudentProgress[]
 }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null)
+  const [apiData, setApiData] = useState<ApiDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Local real data from this browser session
+  const localProgress = getAllProgress()
+  const localProfile = getStudentProfile()
+  const localXP = loadXPState()
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch(`${API_BASE_URL}/school/dashboard`, {
-          // If auth was required, we'd include credentials or headers here
-        })
-        if (!res.ok) throw new Error('Failed to fetch dashboard data')
+        const res = await fetch(`${API_BASE_URL}/school/dashboard`)
+        if (!res.ok) throw new Error('API not available')
         const json = await res.json()
-        setData(json)
+        setApiData(json)
       } catch (err: any) {
-        console.error('Fetch error:', err)
         setError(err.message)
       } finally {
         setLoading(false)
@@ -45,28 +49,47 @@ export default function DashboardPage() {
     fetchData()
   }, [])
 
-  function handleExportCsv() {
-    if (!data) return
+  // Build local student row
+  const localStudent: ApiStudentProgress | null = localProfile ? {
+    id: 'local-1',
+    name: localProfile.name,
+    stages_completed: Object.values(localProgress).reduce((acc, p) => acc + p.stagesCompleted.length, 0),
+    quiz_score: (() => {
+      const scores = Object.values(localProgress).filter(p => p.quizScore !== undefined).map(p => p.quizScore as number)
+      return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
+    })(),
+    completed_at: Object.values(localProgress).some(p => p.completedAt) ? new Date().toISOString() : null,
+  } : null
 
-    const headers = ['Student ID', 'Name', 'Stages Completed', 'Quiz Score', 'Completion Date']
-    const rows = data.students.map(s => [
+  // Merge: API data takes priority; local session is appended if no API
+  const displayData: ApiDashboardData = apiData ?? {
+    batch_code: localProfile?.batchCode ?? 'PILOT1',
+    enrolled: localStudent ? 1 : 12,
+    active: 1,
+    completed: localStudent?.completed_at ? 1 : 0,
+    average_score: localStudent?.quiz_score ?? 0,
+    students: localStudent ? [localStudent] : [
+      { id: '1', name: 'Student A', stages_completed: 5, quiz_score: 80, completed_at: new Date().toISOString() },
+      { id: '2', name: 'Student B', stages_completed: 3, quiz_score: null, completed_at: null },
+      { id: '3', name: 'Student C', stages_completed: 5, quiz_score: 100, completed_at: new Date().toISOString() },
+    ],
+  }
+
+  function handleExportCsv() {
+    const headers = ['Student ID', 'Name', 'Stages Completed', 'Quiz Score', 'Status']
+    const rows = displayData.students.map(s => [
       s.id,
       s.name,
       s.stages_completed.toString(),
-      s.quiz_score !== null ? s.quiz_score.toString() : 'N/A',
-      s.completed_at ? new Date(s.completed_at).toLocaleDateString() : 'In Progress'
+      s.quiz_score !== null ? s.quiz_score + '%' : 'N/A',
+      s.completed_at ? 'Completed' : 'In Progress',
     ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.join(','))
-    ].join('\n')
-
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `eduai_batch_${data.batch_code}_report.csv`)
+    link.setAttribute('download', `eduai_batch_${displayData.batch_code}_report.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -80,29 +103,17 @@ export default function DashboardPage() {
     )
   }
 
-  // Fallback state if backend connection fails during pilot demo (so it doesn't just crash)
-  const displayData = data || {
-    batch_code: 'PILOT1',
-    enrolled: 12,
-    active: 8,
-    completed: 5,
-    average_score: 80,
-    students: [
-      { id: '1', name: 'Student A', stages_completed: 5, quiz_score: 80, completed_at: new Date().toISOString() },
-      { id: '2', name: 'Student B', stages_completed: 3, quiz_score: null, completed_at: null },
-      { id: '3', name: 'Student C', stages_completed: 5, quiz_score: 100, completed_at: new Date().toISOString() },
-    ]
-  }
-
   return (
     <div className="min-h-screen bg-[#0f0f1a] text-slate-200 p-6 md:p-12 font-sans">
       <div className="max-w-5xl mx-auto space-y-8">
-        
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-white">NGO Coordinator Dashboard</h1>
-            <p className="text-slate-400 text-sm mt-1">Batch Code: <span className="font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">{displayData.batch_code}</span></p>
+            <p className="text-slate-400 text-sm mt-1">
+              Batch Code: <span className="font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">{displayData.batch_code}</span>
+            </p>
           </div>
           <button
             onClick={handleExportCsv}
@@ -115,49 +126,69 @@ export default function DashboardPage() {
 
         {error && (
           <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-lg text-sm">
-            Warning: Could not connect to live backend API. Showing offline preview data.
+            ⚠ Backend API not connected. Showing {localStudent ? 'live session' : 'preview'} data.
+          </div>
+        )}
+
+        {/* Live Session Card (only when API is offline) */}
+        {error && localProfile && (
+          <div className="bg-[#1a1a2e] border border-purple-500/20 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+              <p className="text-sm font-medium text-purple-300">Live Session — {localProfile.name}</p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {MODULE_ORDER.map(slug => {
+                const prog = localProgress[slug]
+                const mod = MODULES[slug]
+                if (!mod) return null
+                const done = prog?.stagesCompleted.length ?? 0
+                const completed = prog?.completedAt != null
+                return (
+                  <div key={slug} className={`p-3 rounded-xl border ${completed ? 'border-emerald-500/20 bg-emerald-500/5' : done > 0 ? 'border-blue-500/20 bg-blue-500/5' : 'border-slate-700 bg-slate-900'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{mod.icon}</span>
+                      <div>
+                        <p className="text-xs font-medium text-slate-200 leading-tight">{mod.title}</p>
+                        <p className="text-[10px] text-slate-500">{done}/{mod.stages.length} stages{prog?.quizScore !== undefined ? ` · ${prog.quizScore}%` : ''}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-xs text-slate-400">
+              <Star className="w-3.5 h-3.5 text-amber-400" />
+              <span>{localXP.totalXP} XP • Level {localXP.level}: {localXP.levelName}</span>
+              <span>•</span>
+              <span>{localXP.unlockedAchievementIds.length} achievements</span>
+            </div>
           </div>
         )}
 
         {/* Top Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-500/10 rounded-lg"><Users className="w-5 h-5 text-blue-400" /></div>
-              <p className="text-slate-400 text-sm">Enrolled</p>
+          {[
+            { label: 'Enrolled', value: displayData.enrolled, icon: <Users className="w-5 h-5 text-blue-400" />, bg: 'bg-blue-500/10' },
+            { label: 'Active', value: displayData.active, icon: <Activity className="w-5 h-5 text-amber-400" />, bg: 'bg-amber-500/10' },
+            { label: 'Completed', value: displayData.completed, icon: <CheckCircle className="w-5 h-5 text-emerald-400" />, bg: 'bg-emerald-500/10' },
+            { label: 'Avg Score', value: displayData.average_score + '%', icon: <BarChart2 className="w-5 h-5 text-purple-400" />, bg: 'bg-purple-500/10' },
+          ].map(stat => (
+            <div key={stat.label} className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`p-2 ${stat.bg} rounded-lg`}>{stat.icon}</div>
+                <p className="text-slate-400 text-sm">{stat.label}</p>
+              </div>
+              <p className="text-3xl font-semibold text-white">{stat.value}</p>
             </div>
-            <p className="text-3xl font-semibold text-white">{displayData.enrolled}</p>
-          </div>
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-amber-500/10 rounded-lg"><Activity className="w-5 h-5 text-amber-400" /></div>
-              <p className="text-slate-400 text-sm">Active</p>
-            </div>
-            <p className="text-3xl font-semibold text-white">{displayData.active}</p>
-          </div>
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-emerald-500/10 rounded-lg"><CheckCircle className="w-5 h-5 text-emerald-400" /></div>
-              <p className="text-slate-400 text-sm">Completed</p>
-            </div>
-            <p className="text-3xl font-semibold text-white">{displayData.completed}</p>
-          </div>
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-purple-500/10 rounded-lg"><div className="w-5 h-5 flex items-center justify-center font-bold text-purple-400">%</div></div>
-              <p className="text-slate-400 text-sm">Avg Score</p>
-            </div>
-            <p className="text-3xl font-semibold text-white">{displayData.average_score}%</p>
-          </div>
+          ))}
         </div>
 
         {/* Student Table */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
             <h3 className="font-medium text-white">Student Progress</h3>
+            <span className="text-xs text-slate-500">{displayData.students.length} students</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -180,8 +211,8 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <span className="text-slate-300 w-4">{student.stages_completed}</span>
                           <div className="flex-1 h-1.5 bg-slate-800 rounded-full max-w-[80px] overflow-hidden">
-                            <div 
-                              className="h-full bg-emerald-500 rounded-full" 
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
                               style={{ width: `${(student.stages_completed / 5) * 100}%` }}
                             />
                           </div>
@@ -189,7 +220,10 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-6 py-4">
                         {student.quiz_score !== null ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            student.quiz_score >= 80 ? 'bg-emerald-500/10 text-emerald-300' :
+                            student.quiz_score >= 60 ? 'bg-amber-500/10 text-amber-300' : 'bg-slate-800 text-slate-400'
+                          }`}>
                             {student.quiz_score}%
                           </span>
                         ) : (
@@ -202,10 +236,15 @@ export default function DashboardPage() {
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                             Completed
                           </span>
-                        ) : (
+                        ) : student.stages_completed > 0 ? (
                           <span className="inline-flex items-center gap-1.5 text-amber-400 text-xs font-medium">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                             In Progress
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-slate-500 text-xs font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                            Not Started
                           </span>
                         )}
                       </td>
@@ -221,7 +260,6 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
-
       </div>
     </div>
   )
