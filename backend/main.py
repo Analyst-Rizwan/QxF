@@ -33,7 +33,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="EduAI School API", version="1.0.0", lifespan=lifespan)
 
 # CORS
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5174").split(",")
+# Support both CORS_ORIGINS (standard) and Frontend (Render dashboard alias)
+_cors_raw = os.getenv("CORS_ORIGINS") or os.getenv("Frontend") or "http://localhost:5174"
+origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
