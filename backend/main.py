@@ -4,10 +4,14 @@ Main server with all routes for code execution, AI tutoring, progress, and dashb
 """
 import os
 import json
+import base64
+import logging
 import uuid
 from datetime import datetime
 from contextlib import asynccontextmanager
+from typing import Optional
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -15,6 +19,8 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 from database import init_db, create_student, get_student, update_student_activity
 from database import save_progress, get_progress, save_xp_state, get_xp_state
@@ -34,7 +40,7 @@ app = FastAPI(title="EduAI School API", version="1.0.0", lifespan=lifespan)
 
 # CORS
 # Support both CORS_ORIGINS (standard) and Frontend (Render dashboard alias)
-_cors_raw = os.getenv("CORS_ORIGINS") or os.getenv("Frontend") or "http://localhost:5174"
+_cors_raw = os.getenv("CORS_ORIGINS") or os.getenv("Frontend") or "http://localhost:5175"
 origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -356,3 +362,172 @@ async def dashboard(batch_code: str = None):
     """Get coordinator dashboard data."""
     data = await get_dashboard_data(batch_code)
     return data
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# JUDGE0 CE — MULTI-LANGUAGE CODE EXECUTION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# In-memory language cache (populated on first /api/code/languages call)
+_cached_languages: list | None = None
+
+# Fallback language list if Judge0 /languages is unreachable
+_FALLBACK_LANGUAGES = [
+    {"id": 71,  "name": "Python (3.8.1)"},
+    {"id": 54,  "name": "C++ (GCC 9.2.0)"},
+    {"id": 50,  "name": "C (GCC 9.2.0)"},
+    {"id": 62,  "name": "Java (OpenJDK 13.0.1)"},
+    {"id": 63,  "name": "JavaScript (Node.js 12.14.0)"},
+    {"id": 74,  "name": "TypeScript (3.7.4)"},
+    {"id": 60,  "name": "Go (1.13.5)"},
+    {"id": 73,  "name": "Rust (1.40.0)"},
+    {"id": 51,  "name": "C# (Mono 6.6.0.161)"},
+    {"id": 78,  "name": "Kotlin (1.3.70)"},
+    {"id": 72,  "name": "Ruby (2.7.0)"},
+    {"id": 83,  "name": "Swift (5.2.3)"},
+    {"id": 68,  "name": "PHP (7.4.1)"},
+    {"id": 90,  "name": "Dart (2.19.2)"},
+    {"id": 81,  "name": "Scala (2.13.2)"},
+    {"id": 80,  "name": "R (4.0.0)"},
+    {"id": 46,  "name": "Bash (5.0.0)"},
+    {"id": 82,  "name": "SQL (SQLite 3.27.2)"},
+]
+
+_DIRECT_HOST = "ce.judge0.com"
+
+
+def _judge0_is_rapidapi() -> bool:
+    host = os.getenv("JUDGE0_API_HOST", _DIRECT_HOST)
+    return "rapidapi" in host.lower()
+
+
+def _judge0_headers() -> dict:
+    headers = {"Content-Type": "application/json"}
+    if _judge0_is_rapidapi():
+        api_key = os.getenv("JUDGE0_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Code execution not configured: JUDGE0_API_KEY missing from server environment.",
+            )
+        headers["X-RapidAPI-Key"] = api_key
+        headers["X-RapidAPI-Host"] = os.getenv("JUDGE0_API_HOST", _DIRECT_HOST)
+    return headers
+
+
+def _judge0_base() -> str:
+    host = os.getenv("JUDGE0_API_HOST") or _DIRECT_HOST
+    return f"https://{host}"
+
+
+# ── Judge0 Schemas ──
+
+class J0ExecuteRequest(BaseModel):
+    source_code: str
+    language_id: int
+    stdin: Optional[str] = ""
+
+class J0ExecuteResponse(BaseModel):
+    stdout: Optional[str] = None
+    stderr: Optional[str] = None
+    compile_output: Optional[str] = None
+    status: dict
+    time: Optional[str] = None
+    memory: Optional[int] = None
+    token: Optional[str] = None
+
+
+# ── Routes ──
+
+@app.post("/api/code/execute", response_model=J0ExecuteResponse)
+async def code_execute(body: J0ExecuteRequest):
+    """
+    Proxy code execution to Judge0 CE.
+    Uses ?wait=true for synchronous single-request execution.
+    All I/O is base64-encoded for safe unicode/binary handling.
+    """
+    headers = _judge0_headers()
+    base_url = _judge0_base()
+
+    payload = {
+        "source_code": base64.b64encode(body.source_code.encode()).decode(),
+        "language_id": body.language_id,
+        "stdin": base64.b64encode((body.stdin or "").encode()).decode(),
+        "base64_encoded": True,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{base_url}/submissions",
+                json=payload,
+                headers=headers,
+                params={"wait": "true", "base64_encoded": "true", "fields": "*"},
+            )
+
+        if response.status_code == 429:
+            raise HTTPException(
+                status_code=429,
+                detail="Judge0 rate limit reached. Please wait a moment before running again.",
+            )
+
+        if not response.is_success:
+            logger.error(f"Judge0 error {response.status_code}: {response.text}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Code execution service error ({response.status_code}). Try again shortly.",
+            )
+
+        data = response.json()
+
+        def _decode(val: Optional[str]) -> Optional[str]:
+            if not val:
+                return None
+            try:
+                return base64.b64decode(val).decode("utf-8", errors="replace")
+            except Exception:
+                return val
+
+        return J0ExecuteResponse(
+            stdout=_decode(data.get("stdout")),
+            stderr=_decode(data.get("stderr")),
+            compile_output=_decode(data.get("compile_output")),
+            status=data.get("status", {"id": 0, "description": "Unknown"}),
+            time=data.get("time"),
+            memory=data.get("memory"),
+            token=data.get("token"),
+        )
+
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Code execution timed out (30s). Check for infinite loops.")
+    except Exception as e:
+        logger.exception("Unexpected error during Judge0 execution")
+        raise HTTPException(status_code=500, detail=f"Execution error: {str(e)}")
+
+
+@app.get("/api/code/languages")
+async def code_languages():
+    """
+    Return supported Judge0 language list.
+    Fetched from Judge0 once and cached in memory.
+    Falls back to built-in list if Judge0 is unreachable.
+    """
+    global _cached_languages
+
+    if _cached_languages is not None:
+        return _cached_languages
+
+    try:
+        headers = _judge0_headers()
+        base_url = _judge0_base()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{base_url}/languages", headers=headers)
+        if response.is_success:
+            _cached_languages = response.json()
+            return _cached_languages
+    except Exception as e:
+        logger.warning(f"Could not fetch Judge0 language list: {e}")
+
+    return _FALLBACK_LANGUAGES

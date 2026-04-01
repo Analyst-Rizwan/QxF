@@ -12,9 +12,17 @@ interface MonacoEditorProps {
   height?: string
   readOnly?: boolean
   filename?: string
+  language?: string
 }
 
-export default function MonacoEditor({ value, onChange, onRun, height = '220px', readOnly = false, filename = 'program.py' }: MonacoEditorProps) {
+const LANG_EXTENSION: Record<string, string> = {
+  python: 'py', javascript: 'js', typescript: 'ts', cpp: 'cpp', c: 'c',
+  java: 'java', go: 'go', rust: 'rs', csharp: 'cs', kotlin: 'kt',
+  ruby: 'rb', swift: 'swift', php: 'php', dart: 'dart', scala: 'scala',
+  r: 'r', shell: 'sh', sql: 'sql',
+}
+
+export default function MonacoEditor({ value, onChange, onRun, height = '220px', readOnly = false, filename, language = 'python' }: MonacoEditorProps) {
   const editorRef = useRef<any>(null)
   const onRunRef = useRef(onRun)
 
@@ -187,7 +195,7 @@ export default function MonacoEditor({ value, onChange, onRun, height = '220px',
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500/60" />
             <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
           </div>
-          <span className="text-xs text-slate-500 font-mono">{filename}</span>
+          <span className="text-xs text-slate-500 font-mono">{filename ?? `program.${LANG_EXTENSION[language] ?? 'py'}`}</span>
         </div>
         <div className="flex items-center gap-2">
           {onRun && (
@@ -199,7 +207,7 @@ export default function MonacoEditor({ value, onChange, onRun, height = '220px',
 
       <Editor
         height={height}
-        defaultLanguage="python"
+        language={language}
         value={value}
         onChange={(v) => onChange(v ?? '')}
         onMount={handleMount}

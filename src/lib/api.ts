@@ -143,3 +143,42 @@ export async function checkBackendHealth(): Promise<boolean> {
     return false
   }
 }
+
+// ── Judge0 Code Execution ──
+
+export interface J0ExecuteRequest {
+  source_code: string
+  language_id: number
+  stdin?: string
+}
+
+export interface J0ExecuteResponse {
+  stdout: string | null
+  stderr: string | null
+  compile_output: string | null
+  status: { id: number; description: string }
+  time: string | null
+  memory: number | null
+  token: string | null
+}
+
+export const codeApi = {
+  execute: async (data: J0ExecuteRequest): Promise<J0ExecuteResponse> => {
+    const res = await fetch(`${API_BASE}/code/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || `Execution error (${res.status})`)
+    }
+    return res.json()
+  },
+
+  getLanguages: async (): Promise<{ id: number; name: string }[]> => {
+    const res = await fetch(`${API_BASE}/code/languages`)
+    if (!res.ok) throw new Error('Failed to fetch languages')
+    return res.json()
+  },
+}
