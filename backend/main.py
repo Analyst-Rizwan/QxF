@@ -57,8 +57,8 @@ class ChatRequest(BaseModel):
 # ── Valid batch codes ──
 
 VALID_BATCH_CODES = {
-    "PILOT1": "EduAI School Pilot — Batch 1",
-    "PILOT2": "EduAI School Pilot — Batch 2",
+    "PILOT1": "EduAI NGO Pilot — Batch 1",
+    "PILOT2": "EduAI NGO Pilot — Batch 2",
     "DEMO01": "EduAI Demo Batch",
     "CLASS9": "EduAI Class 9 — Coimbatore",
     "CLASS10": "EduAI Class 10 — Coimbatore",
