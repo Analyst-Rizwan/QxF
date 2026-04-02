@@ -110,7 +110,7 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-white">NGO Coordinator Dashboard</h1>
+            <h1 className="text-2xl font-semibold text-white">Coordinator Dashboard</h1>
             <p className="text-slate-400 text-sm mt-1">
               Batch Code: <span className="font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">{displayData.batch_code}</span>
             </p>
