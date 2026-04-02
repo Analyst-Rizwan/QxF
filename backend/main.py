@@ -1,14 +1,12 @@
 """
-EduAI School — FastAPI Application
-Main server with all routes for code execution, AI tutoring, progress, and dashboard.
+EduAI School — FastAPI Application (Stateless Demo)
+Routes: health, code execution (Judge0), batch enrollment, AI tutor (stateless stream).
+No database — profile/progress/XP handled by localStorage on the frontend.
 """
 import os
 import json
 import base64
 import logging
-import uuid
-from datetime import datetime
-from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
@@ -22,25 +20,13 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-from database import init_db, create_student, get_student, update_student_activity
-from database import save_progress, get_progress, save_xp_state, get_xp_state
-from database import create_conversation, add_message, get_conversation_messages
-from database import get_dashboard_data
 from code_runner import run_python_code
 
 
-# ── Lifespan ──
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_db()
-    yield
-
-app = FastAPI(title="EduAI School API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="EduAI School API", version="1.0.0")
 
 # CORS
-# Support both CORS_ORIGINS (standard) and Frontend (Render dashboard alias)
-_cors_raw = os.getenv("CORS_ORIGINS") or os.getenv("Frontend") or "http://localhost:5175"
+_cors_raw = os.getenv("CORS_ORIGINS") or "http://localhost:5175,http://localhost:5174,http://localhost:5173"
 origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -59,30 +45,6 @@ class RunCodeRequest(BaseModel):
 
 class EnrollRequest(BaseModel):
     batch_code: str
-
-class ProfileRequest(BaseModel):
-    student_id: str
-    name: str
-    batch_code: str
-    batch_name: str
-
-class ProgressRequest(BaseModel):
-    student_id: str
-    module_slug: str
-    stages_completed: list[str]
-    current_stage: int
-    quiz_score: int | None = None
-    challenges_completed: int = 0
-    completed_at: str | None = None
-
-class XPRequest(BaseModel):
-    student_id: str
-    total_xp: int
-    level: int
-    level_name: str
-    streak_days: int
-    last_active_date: str
-    unlocked_achievements: list[str]
 
 class ChatRequest(BaseModel):
     message: str
@@ -125,6 +87,19 @@ You are kind, patient, and encouraging. Every interaction should make the studen
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
+# ── Root ──
+
+@app.get("/")
+async def root():
+    return {
+        "service": "EduAI School API",
+        "version": "1.0.0",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/api/health",
+    }
+
+
 # ── Health Check ──
 
 @app.get("/api/health")
@@ -132,31 +107,27 @@ async def health_check():
     return {"status": "ok", "service": "EduAI School API", "version": "1.0.0"}
 
 
-# ── Code Execution ──
+# ── Code Execution (sandboxed Python) ──
 
 @app.post("/api/school/run")
 async def execute_code(request: RunCodeRequest):
     """Execute Python code in a sandboxed environment."""
     if not request.code.strip():
         raise HTTPException(400, "No code provided")
-
     if len(request.code) > 10000:
         raise HTTPException(400, "Code too long (max 10,000 characters)")
-
     result = run_python_code(request.code, request.inputs)
     return result
 
 
-# ── Enrollment ──
+# ── Enrollment (stateless — hardcoded batch codes) ──
 
 @app.post("/api/school/enroll")
 async def enroll_student(request: EnrollRequest):
     """Validate a batch code and return batch info."""
     code = request.batch_code.strip().upper()
-
     if code not in VALID_BATCH_CODES:
         raise HTTPException(404, "Batch code not recognized")
-
     return {
         "valid": True,
         "batch_code": code,
@@ -164,100 +135,15 @@ async def enroll_student(request: EnrollRequest):
     }
 
 
-# ── Student Profile ──
-
-@app.post("/api/school/profile")
-async def save_profile(request: ProfileRequest):
-    """Save or update a student profile."""
-    await create_student(request.student_id, request.name, request.batch_code, request.batch_name)
-    return {"ok": True, "student_id": request.student_id}
-
-@app.get("/api/school/profile/{student_id}")
-async def get_profile(student_id: str):
-    """Get a student profile."""
-    student = await get_student(student_id)
-    if not student:
-        raise HTTPException(404, "Student not found")
-    return student
-
-
-# ── Progress ──
-
-@app.post("/api/school/progress")
-async def save_student_progress(request: ProgressRequest):
-    """Save module progress for a student."""
-    await save_progress(
-        request.student_id,
-        request.module_slug,
-        json.dumps(request.stages_completed),
-        request.current_stage,
-        request.quiz_score,
-        request.challenges_completed,
-        request.completed_at,
-    )
-    await update_student_activity(request.student_id)
-    return {"ok": True}
-
-@app.get("/api/school/progress/{student_id}")
-async def get_student_progress(student_id: str):
-    """Get all module progress for a student."""
-    progress = await get_progress(student_id)
-    # Parse stages_completed JSON strings
-    for p in progress:
-        try:
-            p["stages_completed"] = json.loads(p.get("stages_completed", "[]"))
-        except Exception:
-            p["stages_completed"] = []
-    return {"student_id": student_id, "progress": progress}
-
-
-# ── XP State ──
-
-@app.post("/api/school/xp")
-async def save_student_xp(request: XPRequest):
-    """Save XP/level/streak state for a student."""
-    await save_xp_state(
-        request.student_id,
-        request.total_xp,
-        request.level,
-        request.level_name,
-        request.streak_days,
-        request.last_active_date,
-        json.dumps(request.unlocked_achievements),
-    )
-    return {"ok": True}
-
-@app.get("/api/school/xp/{student_id}")
-async def get_student_xp(student_id: str):
-    """Get XP state for a student."""
-    xp = await get_xp_state(student_id)
-    if not xp:
-        return {
-            "student_id": student_id,
-            "total_xp": 0,
-            "level": 1,
-            "level_name": "Beginner",
-            "streak_days": 0,
-            "last_active_date": None,
-            "unlocked_achievements": [],
-        }
-    try:
-        xp["unlocked_achievements"] = json.loads(xp.get("unlocked_achievements", "[]"))
-    except Exception:
-        xp["unlocked_achievements"] = []
-    return xp
-
-
-# ── AI Tutor (Streaming) ──
+# ── AI Tutor (Stateless Streaming) ──
 
 @app.post("/api/school/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """Stream AI Tutor response via SSE."""
+    """Stream AI Tutor response via SSE. Stateless — no conversation history persisted."""
     api_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("AI_MODEL", "gpt-4o-mini")
 
     if not api_key or api_key == "your_openai_api_key_here":
-        # Fallback: return a helpful non-AI response
         return StreamingResponse(
             _fallback_response(request.message),
             media_type="text/event-stream"
@@ -267,33 +153,19 @@ async def chat_stream(request: ChatRequest):
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=api_key)
 
-        # Get or create conversation
-        conv_id = request.conversation_id
-        history = []
-
-        if conv_id:
-            history = await get_conversation_messages(conv_id)
-        else:
-            student_id = request.student_id or "anon"
-            conv_id = await create_conversation(student_id, request.module_slug)
-
-        # Save student message
-        await add_message(conv_id, "student", request.message)
-
-        # Build messages for OpenAI
         system_prompt = SCHOOL_SYSTEM_PROMPT
         if request.module_title:
             system_prompt += f"\n\nThe student is currently studying: {request.module_title}. Focus your answers on this topic."
 
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in history:
-            role = "assistant" if msg["role"] == "tutor" else "user"
-            messages.append({"role": role, "content": msg["content"]})
-        messages.append({"role": "user", "content": request.message})
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": request.message},
+        ]
 
         async def event_generator():
             full_text = ""
-            yield f"data: {json.dumps({'type': 'conv', 'conversation_id': conv_id})}\n\n"
+            # Return a dummy conv id so frontend code doesn't break
+            yield f"data: {json.dumps({'type': 'conv', 'conversation_id': None})}\n\n"
 
             try:
                 stream = await client.chat.completions.create(
@@ -311,8 +183,6 @@ async def chat_stream(request: ChatRequest):
                         full_text += text
                         yield f"data: {json.dumps({'type': 'delta', 'text': text})}\n\n"
 
-                # Save tutor response
-                await add_message(conv_id, "tutor", full_text)
                 yield f"data: {json.dumps({'type': 'done', 'full_text': full_text})}\n\n"
 
             except Exception as e:
@@ -337,7 +207,6 @@ async def _fallback_response(message: str):
         "function": "A function is like a recipe you write once and use many times.\n\n```python\ndef greet(name):\n    return \"Hi \" + name\n\nprint(greet(\"Priya\"))\n```",
     }
 
-    # Find matching response
     msg_lower = message.lower()
     response = "Great question! 🤔 I'd love to help, but the AI API is not connected right now. Try experimenting in the sandbox — the best way to learn is by running code!"
 
@@ -347,7 +216,6 @@ async def _fallback_response(message: str):
             break
 
     yield f"data: {json.dumps({'type': 'conv', 'conversation_id': None})}\n\n"
-    # Simulate streaming
     words = response.split(" ")
     for i, word in enumerate(words):
         text = word + (" " if i < len(words) - 1 else "")
@@ -355,23 +223,12 @@ async def _fallback_response(message: str):
     yield f"data: {json.dumps({'type': 'done', 'full_text': response})}\n\n"
 
 
-# ── Coordinator Dashboard ──
-
-@app.get("/api/school/dashboard")
-async def dashboard(batch_code: str = None):
-    """Get coordinator dashboard data."""
-    data = await get_dashboard_data(batch_code)
-    return data
-
-
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # JUDGE0 CE — MULTI-LANGUAGE CODE EXECUTION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# In-memory language cache (populated on first /api/code/languages call)
 _cached_languages: list | None = None
 
-# Fallback language list if Judge0 /languages is unreachable
 _FALLBACK_LANGUAGES = [
     {"id": 71,  "name": "Python (3.8.1)"},
     {"id": 54,  "name": "C++ (GCC 9.2.0)"},
@@ -441,11 +298,7 @@ class J0ExecuteResponse(BaseModel):
 
 @app.post("/api/code/execute", response_model=J0ExecuteResponse)
 async def code_execute(body: J0ExecuteRequest):
-    """
-    Proxy code execution to Judge0 CE.
-    Uses ?wait=true for synchronous single-request execution.
-    All I/O is base64-encoded for safe unicode/binary handling.
-    """
+    """Proxy code execution to Judge0 CE."""
     headers = _judge0_headers()
     base_url = _judge0_base()
 
@@ -466,17 +319,11 @@ async def code_execute(body: J0ExecuteRequest):
             )
 
         if response.status_code == 429:
-            raise HTTPException(
-                status_code=429,
-                detail="Judge0 rate limit reached. Please wait a moment before running again.",
-            )
+            raise HTTPException(status_code=429, detail="Judge0 rate limit reached. Please wait a moment before running again.")
 
         if not response.is_success:
             logger.error(f"Judge0 error {response.status_code}: {response.text}")
-            raise HTTPException(
-                status_code=502,
-                detail=f"Code execution service error ({response.status_code}). Try again shortly.",
-            )
+            raise HTTPException(status_code=502, detail=f"Code execution service error ({response.status_code}). Try again shortly.")
 
         data = response.json()
 
@@ -509,11 +356,7 @@ async def code_execute(body: J0ExecuteRequest):
 
 @app.get("/api/code/languages")
 async def code_languages():
-    """
-    Return supported Judge0 language list.
-    Fetched from Judge0 once and cached in memory.
-    Falls back to built-in list if Judge0 is unreachable.
-    """
+    """Return supported Judge0 language list. Cached in memory."""
     global _cached_languages
 
     if _cached_languages is not None:

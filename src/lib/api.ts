@@ -1,11 +1,12 @@
 /**
  * EduAI School — Backend API Client
- * All frontend ↔ FastAPI communication goes through here.
+ * DB-backed routes removed — profile/progress/XP live in localStorage on the frontend.
+ * Backend handles: health, code execution (Judge0), batch enrollment, AI chat stream.
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
-// ── Code Execution ──
+// ── Code Execution (sandboxed Python) ──
 
 export interface RunResult {
   output: string
@@ -46,21 +47,15 @@ export async function validateBatchCode(batchCode: string) {
   }
 }
 
-// ── Student Profile ──
+// ── Student Profile (localStorage only — no server call) ──
 
-export async function saveProfileToServer(studentId: string, name: string, batchCode: string, batchName: string) {
-  try {
-    await fetch(`${API_BASE}/school/profile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: studentId, name, batch_code: batchCode, batch_name: batchName }),
-    })
-  } catch {
-    // Offline — fail silently, localStorage is primary
-  }
+export async function saveProfileToServer(
+  _studentId: string, _name: string, _batchCode: string, _batchName: string
+) {
+  // No-op: profile is stored in localStorage by the frontend
 }
 
-// ── Progress ──
+// ── Progress (localStorage only — no server call) ──
 
 export interface ProgressPayload {
   student_id: string
@@ -72,29 +67,15 @@ export interface ProgressPayload {
   completed_at?: string
 }
 
-export async function saveProgressToServer(data: ProgressPayload) {
-  try {
-    await fetch(`${API_BASE}/school/progress`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-  } catch {
-    // Offline — localStorage is primary
-  }
+export async function saveProgressToServer(_data: ProgressPayload) {
+  // No-op: progress is stored in localStorage by the frontend
 }
 
-export async function loadProgressFromServer(studentId: string) {
-  try {
-    const res = await fetch(`${API_BASE}/school/progress/${studentId}`)
-    if (!res.ok) return null
-    return await res.json()
-  } catch {
-    return null
-  }
+export async function loadProgressFromServer(_studentId: string) {
+  return null // Always fall back to localStorage
 }
 
-// ── XP ──
+// ── XP (localStorage only — no server call) ──
 
 export interface XPPayload {
   student_id: string
@@ -106,31 +87,14 @@ export interface XPPayload {
   unlocked_achievements: string[]
 }
 
-export async function saveXPToServer(data: XPPayload) {
-  try {
-    await fetch(`${API_BASE}/school/xp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-  } catch {
-    // Offline
-  }
+export async function saveXPToServer(_data: XPPayload) {
+  // No-op: XP state is stored in localStorage by the frontend
 }
 
-// ── Dashboard ──
+// ── Dashboard (not available in stateless demo) ──
 
-export async function fetchDashboard(batchCode?: string) {
-  try {
-    const url = batchCode
-      ? `${API_BASE}/school/dashboard?batch_code=${batchCode}`
-      : `${API_BASE}/school/dashboard`
-    const res = await fetch(url)
-    if (!res.ok) throw new Error('API error')
-    return await res.json()
-  } catch {
-    return null
-  }
+export async function fetchDashboard(_batchCode?: string) {
+  return null
 }
 
 // ── Health ──
@@ -144,7 +108,7 @@ export async function checkBackendHealth(): Promise<boolean> {
   }
 }
 
-// ── Judge0 Code Execution ──
+// ── Judge0 Code Execution (multi-language playground) ──
 
 export interface J0ExecuteRequest {
   source_code: string

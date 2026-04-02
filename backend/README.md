@@ -1,23 +1,22 @@
-# FastAPI Backend — EduAI School
+---
+title: EduAI School API
+emoji: 🎓
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
 
-A lightweight, fast Python backend providing code execution, AI tutoring, and student progress persistence.
+# EduAI School API
 
-## Setup
+FastAPI backend for the EduAI School platform.
 
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
+## Endpoints
 
-## API Endpoints
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| POST | `/api/school/run` | Execute Python code (sandboxed) |
-| POST | `/api/school/chat/stream` | AI Tutor SSE streaming |
-| POST | `/api/school/enroll` | Batch code validation + enrollment |
-| POST | `/api/school/profile` | Save student profile |
-| GET | `/api/school/progress/{student_id}` | Get student progress |
-| POST | `/api/school/progress` | Save student progress |
-| GET | `/api/school/dashboard` | Coordinator dashboard data |
+- `GET /api/health` — Health check
+- `POST /api/school/run` — Sandboxed Python execution
+- `POST /api/school/enroll` — Batch code validation
+- `POST /api/school/chat/stream` — AI Tutor (SSE streaming)
+- `POST /api/code/execute` — Multi-language execution via Judge0
+- `GET /api/code/languages` — Supported languages list
